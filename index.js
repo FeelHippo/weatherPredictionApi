@@ -3,7 +3,10 @@ require('dotenv').config()
 const AWS = require('aws-sdk')
 const axios = require('axios')
 const cron = require('node-cron')
+const schedule = require('node-schedule')
+const shell = require('shelljs')
 const xlsx = require('node-xlsx')
+const fs = require('fs')
 
 AWS.config.update({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -24,7 +27,15 @@ const unatecData = async () => {
         }
       }
     )
-    // authData.data === { access_token: string, expires_in: number, token_type: string, refresh_token: string }
+
+    // authData.data = {
+    //  access_token: String,
+    //  expires_in: Int === seconds,
+    //  token_type: String === 'Bearer',
+    //  refresh_token: String, 
+    //  scope: String === 'energy.commons.api offline_access'
+    // }
+
     const token = authData?.data?.access_token
   
     const tags = xlsx.parse(__dirname + '/tags.xlsx')
@@ -42,6 +53,28 @@ const unatecData = async () => {
         )
       )
     )
+
+    // signalsData: [
+      // {
+      //   data: {
+      //     id: String,
+      //     tag: String === 'COV:CovaDaSerpe.Cov11.Meteorological.WindDirection',
+      //     name: String === 'PE Cova da Serpe 11 V80 - Meteorological Wind Direction',
+      //     unit: String === 'grad' || 'm/s',
+      //     startDate: ISO String,
+      //     interval: Int === seconds,
+      //     isScalar: Bool,
+      //     facilities: [],
+      //     bdiElements: [],
+      //     created: ISO String,
+      //     lastModified: ISO String,,
+      //     deletedDate: null,
+      //     lastModifiedUser: String
+      //   },
+      //   ...
+      // }
+    // ]
+
     const measuresData = await Promise.all(
       signalsData.map(
         async ({ data }) => data.id && await axios.get(
@@ -54,7 +87,21 @@ const unatecData = async () => {
         )
       )
     )
-    
+
+    // measuresData: [
+    //   measure: {
+    //     data: {
+    //       UniqueId: String,
+    //       signalId: String,
+    //       date: ISO 8601 String,
+    //       value: Float,
+    //       stringValue: '${data.value} ${'grad' || 'm/s'}'
+    //     },
+    //      ...
+    //   },
+    //   ...
+    // ]
+
     return measuresData?.map(measure => measure?.data).filter(measure => measure)
 
   } catch (error) {
@@ -143,5 +190,26 @@ const readValues = async () => {
   }
 }
 
-// cron.schedule('* * * * *', async () => await readValues())
-cron.schedule('0 0 */3 * * *', async () => await readValues())
+cron.schedule('* * * * *', async () => await readValues())
+// cron.schedule('0 0 */3 * * *', async () => await readValues())
+
+schedule.scheduleJob('45 5,12,17 * * *', () => {
+  const response = shell.exec('./ecmwf/HRES_ECMWF_extraccion_continuo.sh');
+  if (response.code === 0) {
+    const conversion = shell.exec(`grib_to_netcdf -o ./ecmwf/output.nc ./ecmwf/input.grib`)
+
+    if (conversion.code === 0) {
+      const fileStream = fs.createReadStream('./ecmwf/output.nc')
+      fileStream.on('error', err => console.log('File Error: ', err))
+
+      s3.upload({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: 'ecmwfCurrentData.nc',
+        Body: fileStream,
+      }, (err, data) => {
+        if (err) throw Error
+        console.log(`Data Updated Succesfully. ${data.Location}`)
+      })
+    }
+  }
+})
