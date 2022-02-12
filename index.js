@@ -193,12 +193,11 @@ const readValues = async () => {
 cron.schedule('* * * * *', async () => await readValues())
 // cron.schedule('0 0 */3 * * *', async () => await readValues())
 
-schedule.scheduleJob('45 5,12,17 * * *', () => {
+schedule.scheduleJob('45,53 5,12,17 * * *', () => {
   const response = shell.exec('./ecmwf/HRES_ECMWF_extraccion_continuo.sh');
-  if (response.code === 0) {
+  if (!response.stderr) {
     const conversion = shell.exec(`grib_to_netcdf -o ./ecmwf/output.nc ./ecmwf/input.grib`)
-
-    if (conversion.code === 0) {
+    if (!conversion.stderr) {
       const fileStream = fs.createReadStream('./ecmwf/output.nc')
       fileStream.on('error', err => console.log('File Error: ', err))
 
