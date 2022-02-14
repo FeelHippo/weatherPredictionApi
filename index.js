@@ -190,10 +190,10 @@ const readValues = async () => {
   }
 }
 
-cron.schedule('* * * * *', async () => await readValues())
-// cron.schedule('0 0 */3 * * *', async () => await readValues())
+// cron.schedule('* * * * *', async () => await readValues())
+cron.schedule('0 0 */3 * * *', async () => await readValues())
 
-schedule.scheduleJob('45,53 5,12,17 * * *', () => {
+schedule.scheduleJob('45 5,17 * * *', () => {
   const response = shell.exec('./ecmwf/HRES_ECMWF_extraccion_continuo.sh');
   if (!response.stderr) {
     const conversion = shell.exec(`grib_to_netcdf -o ./ecmwf/output.nc ./ecmwf/input.grib`)
@@ -201,14 +201,21 @@ schedule.scheduleJob('45,53 5,12,17 * * *', () => {
       const fileStream = fs.createReadStream('./ecmwf/output.nc')
       fileStream.on('error', err => console.log('File Error: ', err))
 
-      s3.upload({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: 'ecmwfCurrentData.nc',
-        Body: fileStream,
-      }, (err, data) => {
-        if (err) throw Error
-        console.log(`Data Updated Succesfully. ${data.Location}`)
-      })
+      const dataTargets = [
+        'ecmwfCurrentData.nc',
+        `archive/ecmwf-${new Date().toISOString().slice(0, 16)}.nc`,
+      ]
+
+      dataTargets.forEach(
+        async target => await s3.upload({
+          Bucket: process.env.AWS_BUCKET_NAME,
+          Key: target,
+          Body: fileStream,
+        }, (err, data) => {
+          if (err) throw Error
+          console.log(`Data Updated Succesfully. ${data.Location}`)
+        })
+      )
     }
   }
 })

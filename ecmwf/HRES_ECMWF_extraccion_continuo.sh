@@ -42,7 +42,7 @@ RETRIEVE,
     DATE       = ${my_date},
     TIME       = ${my_time},
     STEP       = ${STEP},
-    TARGET     = "${PATH_ECMWF}HRES_ECMWF_${my_date}_${my_time}.grib"
+    TARGET     = "${PATH_ECMWF}input.grib"
 EOF
 
 # Descargo los datos
@@ -50,6 +50,4 @@ mars my_request_HRES_${my_date}_${my_time}.mars
 # Borra el fichero de llamada
 if [ $? -eq 0 ]; then
   rm -f my_request_HRES_${my_date}_${my_time}.mars
-  # Copiar archivo para pasarlo a eccodes 
-  cp ${PATH_ECMWF}HRES_ECMWF_${my_date}_${my_time}.grib ${PATH_ECMWF}input.grib
 fi
